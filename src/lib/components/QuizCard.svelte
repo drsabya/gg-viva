@@ -1,6 +1,15 @@
-<!-- src/lib/components/QuizCard.svelte -->
 <script lang="ts">
-	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
+	import { 
+		ChevronLeft, 
+		ChevronRight, 
+		Eye, 
+		EyeOff, 
+		Zap, 
+		BookOpen 
+	} from '@lucide/svelte';
+	import { slide } from 'svelte/transition';
+
+	type Mode = 'quizmaster' | 'review';
 
 	interface Props {
 		question?: string;
@@ -9,6 +18,7 @@
 		total?: number;
 		onNext?: () => void;
 		onPrev?: () => void;
+		mode?: Mode; 
 	}
 
 	let {
@@ -17,132 +27,158 @@
 		index = 0,
 		total = 1,
 		onNext,
-		onPrev
+		onPrev,
+		mode = $bindable('quizmaster') // Made bindable so the local toggle works
 	}: Props = $props();
 
-	let showAnswer = $state(false);
+	// In review mode, we track if the specific card is revealed
+	let isRevealed = $state(false);
 
+	// Reset reveal state when index or mode changes
 	$effect(() => {
-		question;
-		showAnswer = false;
+		index; // dependency
+		mode;  // dependency
+		isRevealed = false;
 	});
+
+	// Logic: In quizmaster, always show. In review, show only if revealed.
+	const showContent = $derived(mode === 'quizmaster' || isRevealed);
 
 	const progressPercent = $derived(
 		total > 0 ? Math.round(((index ?? 0) + 1) / total * 100) : 0
 	);
 
-	function handleShowAnswerToggle() {
-		showAnswer = !showAnswer;
+	function toggleReveal() {
+		if (mode === 'review') isRevealed = !isRevealed;
 	}
 
-	function handleNext() {
-		if (onNext) onNext();
-	}
-
-	function handlePrev() {
-		if (onPrev) onPrev();
+	// Keyboard navigation support
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'ArrowRight') onNext?.();
+		if (e.key === 'ArrowLeft') onPrev?.();
+		if (e.key === ' ' || e.key === 'Enter') {
+			e.preventDefault(); 
+			toggleReveal();
+		}
 	}
 
 	const isFirst = $derived((index ?? 0) <= 0);
 	const isLast = $derived(total > 0 ? (index ?? 0) >= total - 1 : false);
 </script>
 
-<div class="w-full flex items-center justify-center py-10">
+<svelte:window onkeydown={handleKeydown} />
+
+<div class="w-full flex flex-col items-center justify-center py-12 font-mono text-neutral-900">
+	
 	<div
-		class="w-full max-w-xl min-h-[380px] rounded-3xl border border-neutral-300 bg-neutral-50
-        shadow-[0_14px_40px_rgba(0,0,0,0.05)] px-6 py-7 sm:px-8 sm:py-8
-        text-neutral-900 font-mono flex flex-col justify-between"
+		class="relative w-full max-w-xl min-h-[320px] bg-white border border-neutral-200 
+               rounded-[2rem] shadow-[0_20px_40px_-10px_rgba(0,0,0,0.08)] 
+               flex flex-col justify-between overflow-hidden"
 	>
-		<!-- Progress bar -->
-		<div>
-			<div class="mb-5">
-				<div class="flex items-center justify-between mb-1">
-					<span class="text-[11px] text-neutral-500">
-						Question {Math.min(index + 1, total)} of {total}
-					</span>
-					<span class="text-[11px] text-neutral-500">
-						{progressPercent}%
-					</span>
-				</div>
-				<div class="h-1.5 rounded-full bg-neutral-200 overflow-hidden">
-					<div
-						class="h-full bg-neutral-900 transition-[width] duration-300"
-						style={`width: ${progressPercent}%;`}
-					></div>
-				</div>
+		<div class="px-8 pt-8 pb-4">
+			<div class="flex items-center justify-between text-[10px] uppercase tracking-widest text-neutral-400 mb-4">
+				<span>{String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
+				<span>{progressPercent}%</span>
 			</div>
-
-			<div class="space-y-4">
-				<div>
-					<!-- <p class="text-xs uppercase tracking-[0.18em] text-neutral-500 mb-1">
-						Question
-					</p> -->
-					<br>
-					<p class="text-sm sm:text-[15px] leading-relaxed text-neutral-900">
-						{index + 1}. {question}
-					</p>
-				</div>
-
-				{#if showAnswer}
-					<div class="pt-3">
-						<p class="text-[11px] uppercase tracking-[0.18em] text-neutral-500 mb-2">
-							Answer
-						</p>
-						<div
-							class="rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-[13px]
-                                   leading-relaxed text-neutral-800"
-						>
-							{answer}
-						</div>
-					</div>
-				{/if}
+			
+			<div class="w-full h-[2px] bg-neutral-100">
+				<div 
+					class="h-full bg-neutral-900 transition-all duration-500 ease-out"
+					style={`width: ${progressPercent}%;`}
+				></div>
 			</div>
 		</div>
 
-		<!-- Navigation + Show Answer controls -->
-		<div class="mt-8 flex items-center justify-between gap-4">
-			<!-- Previous -->
-			<button
+		<div class="flex-1 px-8 py-2 flex flex-col gap-6">
+			<div>
+				<h3 class="text-lg leading-relaxed font-medium text-neutral-900">
+					{question}
+				</h3>
+			</div>
+
+			<div class="w-8 h-[1px] bg-neutral-200"></div>
+
+			<button 
 				type="button"
-				onclick={handlePrev}
+				onclick={toggleReveal}
+				class="text-left w-full relative group outline-none"
+				disabled={mode === 'quizmaster'}
+			>
+				{#if showContent}
+					<div transition:slide={{ duration: 200 }} class="text-sm leading-7 text-neutral-600">
+						{answer}
+					</div>
+					{#if mode === 'review'}
+						<div class="mt-2 text-[10px] text-neutral-300 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+							(Click to hide)
+						</div>
+					{/if}
+				{:else}
+					<div class="h-24 w-full rounded-xl bg-neutral-50 border border-dashed border-neutral-200 
+								flex flex-col items-center justify-center gap-2 cursor-pointer
+								hover:bg-neutral-100 hover:border-neutral-300 transition-all group-focus:ring-2 ring-neutral-900 ring-offset-2">
+						<Eye class="w-4 h-4 text-neutral-400" />
+						<span class="text-[11px] text-neutral-400 uppercase tracking-widest">Tap to Reveal</span>
+					</div>
+				{/if}
+			</button>
+		</div>
+
+		<div class="px-6 py-6 border-t border-neutral-100 bg-neutral-50/50 flex items-center justify-between">
+			<button
+				onclick={onPrev}
 				disabled={isFirst}
-				class="inline-flex h-9 w-9 items-center justify-center rounded-full border
-					border-neutral-300 bg-white text-neutral-700
-					disabled:opacity-40 disabled:cursor-not-allowed
-					hover:bg-neutral-100 active:bg-neutral-200
-					transition-colors duration-150"
-				aria-label="Previous question"
+				class="h-10 w-10 flex items-center justify-center rounded-full border border-neutral-200 bg-white
+					   text-neutral-600 hover:border-neutral-900 hover:text-neutral-900 hover:scale-105
+					   disabled:opacity-30 disabled:hover:scale-100 disabled:hover:border-neutral-200 disabled:cursor-not-allowed
+					   transition-all duration-200"
+				aria-label="Previous"
 			>
-				<ChevronLeft class="h-4 w-4" />
+				<ChevronLeft class="w-4 h-4" />
 			</button>
 
-			<!-- Show / Hide answer -->
-			<button
-				type="button"
-				onclick={handleShowAnswerToggle}
-				class="inline-flex items-center justify-center rounded-2xl px-4 py-2
-                    text-[12px] font-semibold tracking-wide
-                    border border-neutral-300 bg-neutral-900 text-neutral-50
-                    hover:bg-neutral-800 active:bg-neutral-700
-                    transition-colors duration-150"
-			>
-				{showAnswer ? 'Hide answer' : 'Show answer'}
-			</button>
+			<span class="text-[10px] text-neutral-300 uppercase tracking-widest select-none">
+				{mode === 'review' ? 'Review Mode' : 'Quiz Mode'}
+			</span>
 
-			<!-- Next -->
 			<button
-				type="button"
-				onclick={handleNext}
+				onclick={onNext}
 				disabled={isLast}
-				class="inline-flex h-9 w-9 items-center justify-center rounded-full border
-					border-neutral-300 bg-white text-neutral-700
-					disabled:opacity-40 disabled:cursor-not-allowed
-					hover:bg-neutral-100 active:bg-neutral-200
-					transition-colors duration-150"
-				aria-label="Next question"
+				class="h-10 w-10 flex items-center justify-center rounded-full border border-neutral-200 bg-white
+					   text-neutral-600 hover:border-neutral-900 hover:text-neutral-900 hover:scale-105
+					   disabled:opacity-30 disabled:hover:scale-100 disabled:hover:border-neutral-200 disabled:cursor-not-allowed
+					   transition-all duration-200"
+				aria-label="Next"
 			>
-				<ChevronRight class="h-4 w-4" />
+				<ChevronRight class="w-4 h-4" />
 			</button>
 		</div>
 	</div>
+
+	<div class="mt-8 flex items-center p-1 bg-neutral-200/60 rounded-full">
+		<button
+			onclick={() => mode = 'quizmaster'}
+			class="flex items-center gap-2 px-5 py-2 rounded-full text-[11px] uppercase tracking-wider font-semibold transition-all duration-200
+				   {mode === 'quizmaster' 
+				   	? 'bg-neutral-900 text-white shadow-md' 
+					: 'text-neutral-500 hover:text-neutral-900'}"
+		>
+			<Zap class="w-3 h-3" />
+			<span>Quizmaster</span>
+		</button>
+		<button
+			onclick={() => mode = 'review'}
+			class="flex items-center gap-2 px-5 py-2 rounded-full text-[11px] uppercase tracking-wider font-semibold transition-all duration-200
+				   {mode === 'review' 
+				   	? 'bg-neutral-900 text-white shadow-md' 
+					: 'text-neutral-500 hover:text-neutral-900'}"
+		>
+			<BookOpen class="w-3 h-3" />
+			<span>Review</span>
+		</button>
+	</div>
+
+	<p class="mt-4 text-[10px] text-neutral-400">
+		Use <kbd class="font-sans border border-neutral-300 rounded px-1">←</kbd> <kbd class="font-sans border border-neutral-300 rounded px-1">→</kbd> to navigate
+	</p>
 </div>
